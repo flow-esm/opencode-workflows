@@ -7,7 +7,7 @@ on:
       comment_id:      { type: number,  required: false }
       comment_body:    { type: string,  required: false, default: '' }
       ref:             { type: string,  required: false, default: '' }
-      workflows_ref:   { type: string,  required: false, default: v1 }
+      workflows_ref:   { type: string,  required: false, default: main }
       test_globs:      { type: string,  required: true }
       code_globs:      { type: string,  required: true }
 

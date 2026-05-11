@@ -23,7 +23,7 @@ on:
       workflows_ref:
         type: string
         required: false
-        default: v1
+        default: main
       test_globs:
         type: string
         required: true
