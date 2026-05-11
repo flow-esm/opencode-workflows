@@ -1,0 +1,70 @@
+name: opendiscuss
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:    { type: number,  required: true }
+      comment_id:      { type: number,  required: false }
+      comment_body:    { type: string,  required: false, default: '' }
+      ref:             { type: string,  required: false, default: '' }
+      workflows_ref:   { type: string,  required: false, default: v1 }
+      test_globs:      { type: string,  required: true }
+      code_globs:      { type: string,  required: true }
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: opendiscuss-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ inputs.ref }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - name: Run opendiscuss round
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-flash
+          agent: orchestrator-opendiscuss
+          prompt: |
+            /opendiscuss invocation on issue #${{ inputs.issue_number }}.
+            Triggering comment: ${{ inputs.comment_body }}
+
+            Read the entire thread and look for prior state markers:
+              <!-- opencode-state workflow=opendiscuss ... -->
+
+            DISCUSSION CYCLE: convener-question -> user-answer -> adversarial-answer
+
+            FIRST ROUND (no prior opendiscuss marker):
+              - If the topic warrants it, invoke @literature-researcher ONCE.
+                Post its report as a comment.
+              - Invoke @moderator (acting as convener) to ask the first question.
+              - End with marker:
+                <!-- opencode-state workflow=opendiscuss phase=awaiting-user round=0 run=${{ github.run_id }} -->
+
+            CONTINUATION:
+              Inspect the most recent state marker:
+                phase=awaiting-user
+                  -> the triggering comment IS the user answer
+                  -> invoke @adversarial. It may decline if no adversarial value
+                     is found (state so explicitly).
+                  -> post its response as a comment
+                  -> invoke @moderator: did we converge OR did user say "/done"?
+                       converged -> post "## opendiscuss summary" comment, marker:
+                         <!-- opencode-state workflow=opendiscuss phase=converged run=${{ github.run_id }} -->
+                       not converged -> @moderator asks next question, marker:
+                         <!-- opencode-state workflow=opendiscuss phase=awaiting-user round=N+1 run=${{ github.run_id }} -->
+
+            Do NOT modify any files.

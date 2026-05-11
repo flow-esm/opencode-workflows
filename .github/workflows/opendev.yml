@@ -1,0 +1,277 @@
+name: opendev
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        type: number
+        required: true
+      comment_id:
+        type: number
+        required: false
+      comment_body:
+        type: string
+        required: false
+        default: ''
+      is_pr:
+        type: boolean
+        required: true
+      ref:
+        type: string
+        required: false
+        default: ''
+      workflows_ref:
+        type: string
+        required: false
+        default: v1
+      test_globs:
+        type: string
+        required: true
+      code_globs:
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: opendev-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  # -----------------------------------------------------------------
+  # 1. Planner — decomposes the issue/PR into feature units
+  # -----------------------------------------------------------------
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      features: ${{ steps.extract.outputs.features }}
+      branch: ${{ steps.branch.outputs.branch }}
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ inputs.ref }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - name: Resolve working branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_PR: ${{ inputs.is_pr }}
+          ISSUE: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          if [ "$IS_PR" = "true" ]; then
+            branch=$(gh pr view "$ISSUE" --json headRefName -q .headRefName)
+          else
+            branch="opendev/issue-${ISSUE}"
+            git checkout -B "$branch"
+            git push --set-upstream origin "$branch" || true
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Run planner agent
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-pro
+          agent: orchestrator-opendev-plan
+          prompt: |
+            You are running the PLANNING phase of /opendev for issue/PR #${{ inputs.issue_number }}.
+            Branch: ${{ steps.branch.outputs.branch }}
+            Triggering comment: ${{ inputs.comment_body }}
+
+            Invoke the @planner subagent. Its job is to:
+              1. Read the issue/PR body and full thread.
+              2. Decompose the work into INDEPENDENT features.
+              3. For each feature emit: { "id": "<slug>", "title": "...", "scope": "..." }
+              4. Post a comment to the issue/PR titled "## opendev plan" containing
+                 a markdown checklist of features, AND a fenced ```json block with
+                 the feature array (this block is parsed by downstream jobs).
+              5. End with state marker:
+                 <!-- opencode-state workflow=opendev phase=planned run=${{ github.run_id }} -->
+
+            Do NOT modify any files. Do NOT invoke other subagents.
+
+      - name: Extract feature matrix from planner comment
+        id: extract
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          # find latest comment containing '## opendev plan'
+          comment=$(gh issue view "$ISSUE" --json comments \
+            -q '[.comments[] | select(.body | contains("## opendev plan"))] | last | .body')
+          # extract first ```json fenced block
+          features=$(printf '%s\n' "$comment" \
+            | awk '/^```json$/{flag=1;next}/^```$/{flag=0}flag' \
+            | jq -c '.')
+          if [ -z "$features" ] || [ "$features" = "null" ]; then
+            echo "::error::planner did not emit a json feature block"
+            exit 1
+          fi
+          echo "features=$features" >> "$GITHUB_OUTPUT"
+
+  # -----------------------------------------------------------------
+  # 2. Per-feature matrix: test-dev → code-dev (sequential within job)
+  # -----------------------------------------------------------------
+  feature:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: ${{ fromJSON(needs.plan.outputs.features) }}
+    outputs:
+      results: ${{ steps.collect.outputs.results }}
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ needs.plan.outputs.branch }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - name: test-dev (red)
+        id: testdev
+        continue-on-error: true
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-flash
+          agent: orchestrator-opendev-feature
+          prompt: |
+            Run the TEST-DEV phase for feature:
+            ```json
+            ${{ toJSON(matrix.feature) }}
+            ```
+            Issue/PR: #${{ inputs.issue_number }}
+            Branch: ${{ needs.plan.outputs.branch }}
+
+            Invoke @test-dev. It must:
+              - Read .opencode/paths.json for test_globs
+              - Write tests for ONLY this feature (only files matching test_globs)
+              - Tests may be RED (no implementation yet)
+              - Commit with message "test(${{ matrix.feature.id }}): add tests"
+              - Push to the branch
+              - Post comment with state marker:
+                <!-- opencode-state workflow=opendev phase=test-dev-done feature=${{ matrix.feature.id }} run=${{ github.run_id }} -->
+
+      - name: code-dev (green)
+        id: codedev
+        if: steps.testdev.outcome == 'success'
+        continue-on-error: true
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-flash
+          agent: orchestrator-opendev-feature
+          prompt: |
+            Run the CODE-DEV phase for feature:
+            ```json
+            ${{ toJSON(matrix.feature) }}
+            ```
+            Branch: ${{ needs.plan.outputs.branch }}
+
+            Invoke @code-dev. It must:
+              - Read .opencode/paths.json for code_globs
+              - Write the LEAST viable code such that the feature's tests pass
+              - Modify ONLY files matching code_globs
+              - Run the test suite locally to verify green
+              - Commit with message "feat(${{ matrix.feature.id }}): implement"
+              - Push to the branch
+              - Post comment with state marker:
+                <!-- opencode-state workflow=opendev phase=code-dev-done feature=${{ matrix.feature.id }} run=${{ github.run_id }} -->
+
+      - name: Collect feature outcome
+        id: collect
+        run: |
+          set -euo pipefail
+          test_outcome="${{ steps.testdev.outcome }}"
+          code_outcome="${{ steps.codedev.outcome }}"
+          if [ "$test_outcome" = "success" ] && [ "$code_outcome" = "success" ]; then
+            status="passed"
+          else
+            status="failed"
+          fi
+          jq -c -n \
+            --arg id    "${{ matrix.feature.id }}" \
+            --arg title "${{ matrix.feature.title }}" \
+            --arg test  "$test_outcome" \
+            --arg code  "$code_outcome" \
+            --arg stat  "$status" \
+            '{id:$id,title:$title,test_dev:$test,code_dev:$code,status:$stat}' \
+            > result.json
+          {
+            echo 'results<<RESULTS_EOF'
+            cat result.json
+            echo RESULTS_EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feature-${{ matrix.feature.id }}
+          path: result.json
+          if-no-files-found: error
+
+  # -----------------------------------------------------------------
+  # 3. Reviewer — single review across all features
+  # -----------------------------------------------------------------
+  review:
+    needs: [plan, feature]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ needs.plan.outputs.branch }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: feature-results
+          pattern: feature-*
+          merge-multiple: true
+
+      - name: Aggregate feature results
+        id: agg
+        run: |
+          set -euo pipefail
+          jq -s '.' feature-results/result.json > all-results.json || echo "[]" > all-results.json
+          cat all-results.json
+
+      - name: Run reviewer agent
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-pro
+          agent: orchestrator-opendev-review
+          prompt: |
+            Run the REVIEW phase of /opendev for issue/PR #${{ inputs.issue_number }}.
+            Branch: ${{ needs.plan.outputs.branch }}
+            Per-feature outcomes (JSON): see all-results.json in the working directory.
+
+            Invoke @reviewer. It must:
+              - Read all-results.json to learn which features passed/failed
+              - Read the diff between origin/HEAD and the original base branch
+              - Run the test suite once more
+              - Follow the review-report skill (skill/review-report/SKILL.md)
+              - Post TWO comments to the issue/PR:
+                  (a) a SUMMARY comment with a checklist of features and overall verdict
+                  (b) the FULL review report as a separate comment
+              - End with state marker:
+                <!-- opencode-state workflow=opendev phase=reviewed run=${{ github.run_id }} -->
+
+            Do NOT modify any files.

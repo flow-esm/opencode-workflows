@@ -1,0 +1,76 @@
+name: Setup opencode workflow environment
+description: >
+  Checks out the consumer repo, pulls in agents/skills from opencode-workflows,
+  writes the path-globs config, and prepares context files.
+
+inputs:
+  ref:
+    description: Branch or ref to check out in the consumer repo
+    required: false
+    default: ''
+  workflows_ref:
+    description: Tag or ref of opencode-workflows to pull agents/skills from
+    required: false
+    default: v1
+  test_globs:
+    description: Comma-separated globs identifying test files
+    required: true
+  code_globs:
+    description: Comma-separated globs identifying code files
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check out consumer repo
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Check out opencode-workflows
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/opencode-workflows
+        ref: ${{ inputs.workflows_ref }}
+        path: .opencode-workflows
+        persist-credentials: false
+
+    - name: Install agents and skills locally
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p .opencode/agent
+        mkdir -p skill
+        cp -r .opencode-workflows/agents/*.md .opencode/agent/
+        cp -r .opencode-workflows/skills/* skill/
+        echo "Installed agents:"
+        ls -1 .opencode/agent
+        echo "Installed skills:"
+        ls -1 skill
+
+    - name: Write path-globs config
+      shell: bash
+      env:
+        TEST_GLOBS: ${{ inputs.test_globs }}
+        CODE_GLOBS: ${{ inputs.code_globs }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os
+        cfg = {
+          "test_globs": [g.strip() for g in os.environ["TEST_GLOBS"].split(",") if g.strip()],
+          "code_globs": [g.strip() for g in os.environ["CODE_GLOBS"].split(",") if g.strip()],
+        }
+        os.makedirs(".opencode", exist_ok=True)
+        with open(".opencode/paths.json", "w") as f:
+            json.dump(cfg, f, indent=2)
+        print(json.dumps(cfg, indent=2))
+        PY
+
+    - name: Configure git author for bot commits
+      shell: bash
+      run: |
+        git config user.name  "opencode-agent[bot]"
+        git config user.email "opencode-agent[bot]@users.noreply.github.com"

@@ -1,0 +1,59 @@
+name: openspecs
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:    { type: number,  required: true }
+      comment_id:      { type: number,  required: false }
+      comment_body:    { type: string,  required: false, default: '' }
+      ref:             { type: string,  required: false, default: '' }
+      workflows_ref:   { type: string,  required: false, default: v1 }
+      test_globs:      { type: string,  required: true }
+      code_globs:      { type: string,  required: true }
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: openspecs-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ inputs.ref }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - name: Run specs-creator
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-pro
+          agent: orchestrator-openspecs
+          prompt: |
+            /openspecs invocation on issue #${{ inputs.issue_number }}.
+            Triggering comment: ${{ inputs.comment_body }}
+
+            Invoke @specs-creator. It must:
+              - Read the full issue body and thread.
+              - Look for prior state markers:
+                <!-- opencode-state workflow=openspecs ... -->
+                If a previous run posted clarifying questions and the user has now
+                answered, continue from that state.
+              - Follow the specs-template skill (skill/specs-template/SKILL.md).
+              - If anything is ambiguous, post a comment with clarifying questions
+                and END with marker:
+                <!-- opencode-state workflow=openspecs phase=awaiting-user-answer round=N run=${{ github.run_id }} -->
+              - Otherwise post the final specs as a comment titled
+                "## openspecs result" and END with marker:
+                <!-- opencode-state workflow=openspecs phase=converged run=${{ github.run_id }} -->
+
+            Do NOT modify any files.

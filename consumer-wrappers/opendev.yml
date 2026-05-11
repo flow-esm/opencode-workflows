@@ -1,0 +1,28 @@
+# Replace tobifinn with the account/org that hosts opencode-workflows.
+name: opendev
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  opendev:
+    if: |
+      contains(github.event.comment.body, '/opendev') &&
+      (github.event.comment.author_association == 'tobifinn' ||
+       github.event.comment.author_association == 'MEMBER')
+    uses: tobifinn/opencode-workflows/.github/workflows/opendev.yml@v1
+    with:
+      issue_number: ${{ github.event.issue.number }}
+      comment_id:   ${{ github.event.comment.id }}
+      comment_body: ${{ github.event.comment.body }}
+      is_pr:        ${{ github.event.issue.pull_request != null }}
+      test_globs:   ${{ vars.OPENCODE_TEST_GLOBS || '**/test_*.py,**/*_test.py,**/tests/**,**/*.test.ts,**/*.test.js,**/*.spec.ts,**/*.spec.js,**/*_test.go,**/*Test.java,**/*Spec.scala' }}
+      code_globs:   ${{ vars.OPENCODE_CODE_GLOBS || '!**/test_*.py,!**/*_test.py,!**/tests/**,!**/*.test.ts,!**/*.test.js,!**/*.spec.ts,!**/*.spec.js,!**/*_test.go,!**/*Test.java,!**/*Spec.scala' }}
+    secrets: inherit

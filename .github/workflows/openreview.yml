@@ -1,0 +1,67 @@
+name: openreview
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:    { type: number,  required: true }   # PR number
+      comment_id:      { type: number,  required: false }
+      comment_body:    { type: string,  required: false, default: '' }
+      ref:             { type: string,  required: false, default: '' }
+      workflows_ref:   { type: string,  required: false, default: v1 }
+      test_globs:      { type: string,  required: true }
+      code_globs:      { type: string,  required: true }
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: openreview-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve PR head ref
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          branch=$(gh pr view "$PR" --json headRefName -q .headRefName)
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ steps.resolve.outputs.branch }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - name: Run reviewer
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-pro
+          agent: orchestrator-openreview
+          prompt: |
+            /openreview invocation on PR #${{ inputs.issue_number }}.
+            Triggering comment: ${{ inputs.comment_body }}
+
+            Invoke @reviewer. It must:
+              - Read the PR description and thread.
+              - Diff the PR head against its base.
+              - Run the test suite locally.
+              - Follow the review-report skill (skill/review-report/SKILL.md).
+              - Post TWO comments:
+                  (a) a SUMMARY comment with a checklist of issues by severity
+                  (b) the FULL review report as a separate comment
+              - End with marker:
+                <!-- opencode-state workflow=openreview phase=reviewed run=${{ github.run_id }} -->
+
+            Do NOT modify any files.

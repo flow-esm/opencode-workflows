@@ -1,0 +1,65 @@
+name: openrefine
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:    { type: number,  required: true }
+      comment_id:      { type: number,  required: false }
+      comment_body:    { type: string,  required: false, default: '' }
+      ref:             { type: string,  required: false, default: '' }
+      workflows_ref:   { type: string,  required: false, default: v1 }
+      test_globs:      { type: string,  required: true }
+      code_globs:      { type: string,  required: true }
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: openrefine-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ inputs.ref }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      - name: Run openrefine round
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-flash
+          agent: orchestrator-openrefine
+          prompt: |
+            /openrefine invocation on issue #${{ inputs.issue_number }}.
+            Triggering comment: ${{ inputs.comment_body }}
+
+            Read the entire thread and look for prior state markers:
+              <!-- opencode-state workflow=openrefine ... -->
+
+            FIRST-ROUND BEHAVIOR (no prior openrefine marker found):
+              - If the issue references unfamiliar concepts or external research
+                might help, invoke @literature-researcher (ONCE, only on round 0).
+                Post its report as a comment.
+              - Then invoke @moderator to ask the FIRST clarifying question.
+              - End with marker:
+                <!-- opencode-state workflow=openrefine phase=awaiting-user round=0 run=${{ github.run_id }} -->
+
+            SUBSEQUENT-ROUND BEHAVIOR (prior marker found):
+              - Identify the latest user reply after the most recent moderator question.
+              - Invoke @moderator to evaluate convergence:
+                  * If converged OR the user said "/done", post a final summary
+                    comment titled "## openrefine summary" and end with:
+                    <!-- opencode-state workflow=openrefine phase=converged run=${{ github.run_id }} -->
+                  * Else ask the next, narrower question and end with:
+                    <!-- opencode-state workflow=openrefine phase=awaiting-user round=N+1 run=${{ github.run_id }} -->
+
+            Do NOT modify any files.

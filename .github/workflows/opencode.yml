@@ -1,0 +1,58 @@
+name: opencode
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:    { type: number,  required: true }
+      comment_id:      { type: number,  required: false }
+      comment_body:    { type: string,  required: false, default: '' }
+      is_pr:           { type: boolean, required: true }
+      ref:             { type: string,  required: false, default: '' }
+      workflows_ref:   { type: string,  required: false, default: v1 }
+      test_globs:      { type: string,  required: true }
+      code_globs:      { type: string,  required: true }
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: opencode-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${{ github.repository_owner }}/opencode-workflows/.github/actions/setup@v1
+        with:
+          ref: ${{ inputs.ref }}
+          workflows_ref: ${{ inputs.workflows_ref }}
+          test_globs: ${{ inputs.test_globs }}
+          code_globs: ${{ inputs.code_globs }}
+
+      # Generic /opencode: just pass the comment through to the default agent.
+      # No orchestrator, no state machine — the default Build agent handles it.
+      - name: Run default opencode agent
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode-go/deepseek-v4-pro
+          # No `agent:` input -> default Build primary agent.
+          prompt: |
+            Generic /opencode invocation on ${{ inputs.is_pr && 'PR' || 'issue' }} #${{ inputs.issue_number }}.
+
+            Triggering comment:
+            ---
+            ${{ inputs.comment_body }}
+            ---
+
+            Read the issue/PR and thread for context. Do whatever the user asked.
+            You may modify files, commit, push, and post comments. If you open
+            a PR, link it back to issue #${{ inputs.issue_number }}.
+
+            End with state marker:
+            <!-- opencode-state workflow=opencode phase=done run=${{ github.run_id }} -->

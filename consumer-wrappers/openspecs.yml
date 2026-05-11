@@ -1,0 +1,27 @@
+name: openspecs
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+jobs:
+  openspecs:
+    # Issue-only: skip if this is a PR conversation comment.
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.comment.body, '/openspecs') &&
+      (github.event.comment.author_association == 'tobifinn' ||
+       github.event.comment.author_association == 'MEMBER')
+    uses: tobifinn/opencode-workflows/.github/workflows/openspecs.yml@v1
+    with:
+      issue_number: ${{ github.event.issue.number }}
+      comment_id:   ${{ github.event.comment.id }}
+      comment_body: ${{ github.event.comment.body }}
+      test_globs:   ${{ vars.OPENCODE_TEST_GLOBS || '**/test_*.py,**/*_test.py,**/tests/**,**/*.test.ts,**/*.test.js,**/*.spec.ts,**/*.spec.js,**/*_test.go,**/*Test.java,**/*Spec.scala' }}
+      code_globs:   ${{ vars.OPENCODE_CODE_GLOBS || '!**/test_*.py,!**/*_test.py,!**/tests/**,!**/*.test.ts,!**/*.test.js,!**/*.spec.ts,!**/*.spec.js,!**/*_test.go,!**/*Test.java,!**/*Spec.scala' }}
+    secrets: inherit

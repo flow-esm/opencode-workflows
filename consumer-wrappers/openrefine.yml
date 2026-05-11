@@ -1,0 +1,26 @@
+name: openrefine
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+jobs:
+  openrefine:
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.comment.body, '/openrefine') &&
+      (github.event.comment.author_association == 'tobifinn' ||
+       github.event.comment.author_association == 'MEMBER')
+    uses: tobifinn/opencode-workflows/.github/workflows/openrefine.yml@v1
+    with:
+      issue_number: ${{ github.event.issue.number }}
+      comment_id:   ${{ github.event.comment.id }}
+      comment_body: ${{ github.event.comment.body }}
+      test_globs:   ${{ vars.OPENCODE_TEST_GLOBS || '**/test_*.py,**/*_test.py,**/tests/**,**/*.test.ts,**/*.test.js,**/*.spec.ts,**/*.spec.js,**/*_test.go,**/*Test.java,**/*Spec.scala' }}
+      code_globs:   ${{ vars.OPENCODE_CODE_GLOBS || '!**/test_*.py,!**/*_test.py,!**/tests/**,!**/*.test.ts,!**/*.test.js,!**/*.spec.ts,!**/*.spec.js,!**/*_test.go,!**/*Test.java,!**/*Spec.scala' }}
+    secrets: inherit
