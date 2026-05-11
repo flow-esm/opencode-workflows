@@ -16,7 +16,6 @@ permission:
   bash:
     "*": ask
     "gh issue *": allow
-    "gh pr *": allow
     "cat *": allow
     "ls *": allow
   task:
@@ -61,3 +60,4 @@ CONSTRAINTS:
 - Adversarial may decline; respect that.
 - Literature researcher: only round 0, only once.
 - Never modify files.
+- Never create or modify pull requests. All responses are issue comments only.

@@ -62,4 +62,6 @@ jobs:
                   * Else ask the next, narrower question and end with:
                     <!-- opencode-state workflow=openrefine phase=awaiting-user round=N+1 run=${{ github.run_id }} -->
 
+            Post all responses as issue comments using `gh issue comment`.
+            Never create or modify pull requests.
             Do NOT modify any files.
