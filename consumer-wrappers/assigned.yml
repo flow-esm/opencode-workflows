@@ -14,7 +14,7 @@ jobs:
   assigned:
     # Trigger only when the issue is assigned to the opencode-agent user.
     if: github.event.assignee.login == 'opencode-agent'
-    uses: tobifinn/opencode-workflows/.github/workflows/assigned.yml@main
+    uses: flow-esm/opencode-workflows/.github/workflows/assigned.yml@main
     with:
       issue_number: ${{ github.event.issue.number }}
       test_globs:   ${{ vars.OPENCODE_TEST_GLOBS || '**/test_*.py,**/*_test.py,**/tests/**,**/*.test.ts,**/*.test.js,**/*.spec.ts,**/*.spec.js,**/*_test.go,**/*Test.java,**/*Spec.scala' }}

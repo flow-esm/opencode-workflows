@@ -32,7 +32,7 @@ runs:
     - name: Check out opencode-workflows
       uses: actions/checkout@v4
       with:
-        repository: tobifinn/opencode-workflows
+        repository: flow-esm/opencode-workflows
         ref: ${{ inputs.workflows_ref }}
         path: .opencode-workflows
         persist-credentials: false

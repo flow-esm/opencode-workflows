@@ -51,7 +51,7 @@ jobs:
       features: ${{ steps.extract.outputs.features }}
       branch: ${{ steps.branch.outputs.branch }}
     steps:
-      - uses: tobifinn/opencode-workflows/.github/actions/setup@main
+      - uses: flow-esm/opencode-workflows/.github/actions/setup@main
         with:
           ref: ${{ inputs.ref }}
           workflows_ref: ${{ inputs.workflows_ref }}
@@ -132,7 +132,7 @@ jobs:
     outputs:
       results: ${{ steps.collect.outputs.results }}
     steps:
-      - uses: tobifinn/opencode-workflows/.github/actions/setup@main
+      - uses: flow-esm/opencode-workflows/.github/actions/setup@main
         with:
           ref: ${{ needs.plan.outputs.branch }}
           workflows_ref: ${{ inputs.workflows_ref }}
@@ -231,7 +231,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: tobifinn/opencode-workflows/.github/actions/setup@main
+      - uses: flow-esm/opencode-workflows/.github/actions/setup@main
         with:
           ref: ${{ needs.plan.outputs.branch }}
           workflows_ref: ${{ inputs.workflows_ref }}
