@@ -8,7 +8,7 @@ on:
       comment_body:    { type: string,  required: false, default: '' }
       is_pr:           { type: boolean, required: true }
       ref:             { type: string,  required: false, default: '' }
-      workflows_ref:   { type: string,  required: false, default: v1 }
+      workflows_ref:   { type: string,  required: false, default: main }
       test_globs:      { type: string,  required: true }
       code_globs:      { type: string,  required: true }
 

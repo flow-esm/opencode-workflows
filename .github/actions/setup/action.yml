@@ -11,7 +11,7 @@ inputs:
   workflows_ref:
     description: Tag or ref of opencode-workflows to pull agents/skills from
     required: false
-    default: v1
+    default: main
   test_globs:
     description: Comma-separated globs identifying test files
     required: true
