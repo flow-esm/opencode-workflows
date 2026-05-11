@@ -67,4 +67,6 @@ jobs:
                        not converged -> @moderator asks next question, marker:
                          <!-- opencode-state workflow=opendiscuss phase=awaiting-user round=N+1 run=${{ github.run_id }} -->
 
+            Post all responses as issue comments using `gh issue comment`.
+            Never create or modify pull requests.
             Do NOT modify any files.

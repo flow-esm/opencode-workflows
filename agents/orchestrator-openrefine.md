@@ -16,7 +16,6 @@ permission:
   bash:
     "*": ask
     "gh issue *": allow
-    "gh pr *": allow
     "cat *": allow
     "ls *": allow
   task:
@@ -56,3 +55,4 @@ CONSTRAINTS:
 - Literature researcher: only round 0, only once.
 - Moderator must not invoke other subagents.
 - Never modify files.
+- Never create or modify pull requests. All responses are issue comments only.

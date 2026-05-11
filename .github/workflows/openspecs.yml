@@ -56,4 +56,6 @@ jobs:
                 "## openspecs result" and END with marker:
                 <!-- opencode-state workflow=openspecs phase=converged run=${{ github.run_id }} -->
 
+            Post all responses as issue comments using `gh issue comment`.
+            Never create or modify pull requests.
             Do NOT modify any files.

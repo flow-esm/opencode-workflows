@@ -17,7 +17,6 @@ permission:
   bash:
     "*": ask
     "gh issue *": allow
-    "gh pr *": allow
     "git log*": allow
     "git diff*": allow
     "ls *": allow
@@ -50,4 +49,4 @@ Steps:
      - Body: full specs per `skill/specs-template/SKILL.md`.
      - Marker: `<!-- opencode-state workflow=openspecs phase=converged run=<run_id> -->`
 
-You may NOT modify files. You may NOT invoke any subagent other than `@specs-creator`.
+You may NOT modify files. You may NOT invoke any subagent other than `@specs-creator`. You may NOT create or modify pull requests — all responses must be issue comments only.
