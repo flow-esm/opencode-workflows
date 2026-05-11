@@ -24,7 +24,7 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: tobifinn/opencode-workflows/.github/actions/setup@v1
+      - uses: tobifinn/opencode-workflows/.github/actions/setup@main
         with:
           ref: ${{ inputs.ref }}
           workflows_ref: ${{ inputs.workflows_ref }}

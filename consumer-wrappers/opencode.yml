@@ -23,7 +23,7 @@ jobs:
       !contains(github.event.comment.body, '/opendiscuss') &&
       (github.event.comment.author_association == 'tobifinn' ||
        github.event.comment.author_association == 'MEMBER')
-    uses: tobifinn/opencode-workflows/.github/workflows/opencode.yml@v1
+    uses: tobifinn/opencode-workflows/.github/workflows/opencode.yml@main
     with:
       issue_number: ${{ github.event.issue.number }}
       comment_id:   ${{ github.event.comment.id }}

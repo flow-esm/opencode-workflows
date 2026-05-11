@@ -35,7 +35,7 @@ jobs:
           branch=$(gh pr view "$PR" --json headRefName -q .headRefName)
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
-      - uses: tobifinn/opencode-workflows/.github/actions/setup@v1
+      - uses: tobifinn/opencode-workflows/.github/actions/setup@main
         with:
           ref: ${{ steps.resolve.outputs.branch }}
           workflows_ref: ${{ inputs.workflows_ref }}

@@ -18,7 +18,7 @@ jobs:
       contains(github.event.comment.body, '/openreview') &&
       (github.event.comment.author_association == 'tobifinn' ||
        github.event.comment.author_association == 'MEMBER')
-    uses: tobifinn/opencode-workflows/.github/workflows/openreview.yml@v1
+    uses: tobifinn/opencode-workflows/.github/workflows/openreview.yml@main
     with:
       issue_number: ${{ github.event.issue.number }}
       comment_id:   ${{ github.event.comment.id }}
